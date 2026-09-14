@@ -31,6 +31,14 @@
     "avada"
   ],
   "author": "gentleman-programming",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eimon/wp-mcp.git"
+  },
+  "homepage": "https://github.com/eimon/wp-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/eimon/wp-mcp/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^3.25.0"

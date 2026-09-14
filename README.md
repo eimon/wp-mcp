@@ -93,7 +93,7 @@ add it directly from the git repository — `npx` clones it, installs dependenci
   "mcpServers": {
     "wordpress": {
       "command": "npx",
-      "args": ["-y", "github:<owner>/<repo>"],
+      "args": ["-y", "github:eimon/wp-mcp"],
       "env": {
         "WORDPRESS_URL": "https://your-site.example.com",
         "WORDPRESS_USERNAME": "your-wp-username",
@@ -111,10 +111,10 @@ claude mcp add wordpress-<site-name> \
   -e WORDPRESS_URL=https://your-site.example.com \
   -e WORDPRESS_USERNAME=your-wp-username \
   -e WORDPRESS_APP_PASSWORD='xxxx xxxx xxxx xxxx xxxx xxxx' \
-  -- npx -y github:<owner>/<repo>
+  -- npx -y github:eimon/wp-mcp
 ```
 
-Pin to a tag or commit (`github:<owner>/<repo>#v0.1.0`) once you cut a release, so a client's config
+Pin to a tag or commit (`github:eimon/wp-mcp#v0.1.0`) once you cut a release, so a client's config
 doesn't silently pick up unreleased changes from the default branch.
 
 ## Available tools
