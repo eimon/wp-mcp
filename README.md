@@ -8,9 +8,10 @@ configured entirely through environment variables at runtime.
 It combines two things:
 
 - WordPress's native REST API (`wp/v2/pages`), authenticated with **Application Passwords**.
-- A small companion must-use plugin, `wp-mcp-theme-bridge`, that exposes two extra read-only
-  routes (`wp-mcp-bridge/v1/theme-styles` and `wp-mcp-bridge/v1/asset-content`) so the agent can
-  see exactly which CSS/JS a page actually renders — theme-agnostic, since it parses the real
+- A small companion plugin, `wp-mcp-theme-bridge` (bundled in this repo under
+  `wordpress-plugin/wp-mcp-theme-bridge/`), that exposes two extra read-only routes
+  (`wp-mcp-bridge/v1/theme-styles` and `wp-mcp-bridge/v1/asset-content`) so the agent can see
+  exactly which CSS/JS a page actually renders — theme-agnostic, since it parses the real
   rendered HTML instead of relying on `theme.json` (many themes, including Astra, resolve colors
   at PHP runtime, not in static files).
 
@@ -19,8 +20,24 @@ It combines two things:
 - Node.js >= 18 (for global `fetch`)
 - A WordPress site with:
   - Application Passwords enabled (WordPress core, no plugin needed for the page tools)
-  - The `wp-mcp-theme-bridge` must-use plugin installed, if you want `get_theme_styles` /
-    `get_asset_content` to work
+  - The `wp-mcp-theme-bridge` plugin installed and **activated**, if you want `get_theme_styles` /
+    `get_asset_content` to work (see below)
+
+## Installing the WordPress-side plugin
+
+`get_theme_styles` and `get_asset_content` need `wp-mcp-theme-bridge` running on the target
+WordPress site — it's a regular plugin (not a must-use/`mu-plugins` one), so it needs manual
+activation like any other plugin:
+
+1. Copy `wordpress-plugin/wp-mcp-theme-bridge/` from this repo into that site's
+   `wp-content/plugins/` directory (git, SFTP, your host's file manager — whatever you already use
+   to deploy). The folder must keep its name (`wp-mcp-theme-bridge/`) with
+   `wp-mcp-theme-bridge.php` directly inside it.
+2. In `wp-admin → Plugins`, find **WP MCP Theme Bridge** and activate it.
+3. Verify it: `curl -H "Authorization: Basic <base64 user:app-password>" "https://your-site.com/wp-json/wp-mcp-bridge/v1/theme-styles?path=/"` should return JSON, not a 404.
+
+The four page tools (`list_pages`, `get_page`, `create_page`, `update_page`) work without this
+plugin — it's only required for the two theme-inspection tools.
 
 ## Install & build
 
@@ -167,9 +184,10 @@ define( 'WP_ENVIRONMENT_TYPE', 'local' );
 
 ### `get_theme_styles` / `get_asset_content` return 404
 
-These two tools depend on the `wp-mcp-theme-bridge` must-use plugin being installed on the target
-site (`wp-content/mu-plugins/` or an equivalent always-on plugin). If it isn't installed, only the
-four page tools (`list_pages`, `get_page`, `create_page`, `update_page`) will work.
+These two tools depend on the `wp-mcp-theme-bridge` plugin (bundled in this repo under
+`wordpress-plugin/`) being installed **and activated** on the target site — see "Installing the
+WordPress-side plugin" above. If it isn't, only the four page tools (`list_pages`, `get_page`,
+`create_page`, `update_page`) will work.
 
 ### 403 / capability errors
 
