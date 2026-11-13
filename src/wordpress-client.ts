@@ -68,6 +68,19 @@ export interface ThemeStylesResult {
   inline_scripts: string[];
 }
 
+export interface MenuItemPayload {
+  title?: string;
+  url?: string;
+  type?: "post_type" | "custom" | "taxonomy" | "post_type_archive";
+  object?: string;
+  object_id?: number;
+  menus?: number;
+  parent?: number;
+  menu_order?: number;
+  status?: "publish" | "draft";
+  target?: "" | "_blank";
+}
+
 export interface PageTemplate {
   file: string;
   name: string;
@@ -208,6 +221,42 @@ export class WordPressClient {
 
   async deletePage(id: number, force = true): Promise<unknown> {
     return this.request<unknown>(`/wp-json/wp/v2/pages/${id}?force=${force}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ---- wp/v2 menus (core since WP 5.9; needs edit_theme_options) --------
+
+  async listMenus(): Promise<unknown[]> {
+    return this.request<unknown[]>("/wp-json/wp/v2/menus?per_page=100&context=edit");
+  }
+
+  async listMenuLocations(): Promise<unknown> {
+    return this.request<unknown>("/wp-json/wp/v2/menu-locations");
+  }
+
+  async listMenuItems(menuId: number): Promise<unknown[]> {
+    const query = this.buildQuery({ menus: menuId, per_page: 100, context: "edit", orderby: "menu_order", order: "asc" });
+    return this.request<unknown[]>(`/wp-json/wp/v2/menu-items${query}`);
+  }
+
+  async createMenuItem(payload: MenuItemPayload): Promise<unknown> {
+    return this.request<unknown>("/wp-json/wp/v2/menu-items", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateMenuItem(id: number, payload: MenuItemPayload): Promise<unknown> {
+    return this.request<unknown>(`/wp-json/wp/v2/menu-items/${id}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteMenuItem(id: number): Promise<unknown> {
+    // Menu items don't support the trash; WordPress rejects deletes without force.
+    return this.request<unknown>(`/wp-json/wp/v2/menu-items/${id}?force=true`, {
       method: "DELETE",
     });
   }

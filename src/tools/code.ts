@@ -24,6 +24,7 @@ interface Page {
   [field: string]: unknown;
 }
 type Status = "draft" | "publish" | "pending" | "private" | "future";
+interface MenuItem { id: number; title: string; url: string; parent: number; order: number; type: string; object: string; object_id: number }
 
 declare const wp: {
   pages: {
@@ -44,6 +45,20 @@ declare const wp: {
     /** Page templates the active theme offers, e.g. { file: "100-width.php", name: "100% Width" }.
      *  file "" is the default template. Needs the wp-mcp-theme-bridge plugin. */
     templates(): Promise<{ file: string; name: string }[]>;
+  };
+  /** Classic WordPress nav menus (what Avada's [fusion_menu] and most themes render). Needs edit_theme_options.
+   *  Changes are live on every page that shows the menu. add/update/remove count as writes. */
+  menus: {
+    list(): Promise<{ id: number; name: string; slug: string; locations: string[]; count?: number }[]>;
+    /** Theme locations, e.g. { main_navigation: { name, description, menu: 28 } }. */
+    locations(): Promise<Record<string, { name: string; description: string; menu: number }>>;
+    /** Items sorted by order; parent 0 = top level. */
+    items(menuId: number): Promise<MenuItem[]>;
+    /** Link a page ({ pageId }) or a URL ({ url }). title defaults to the page title. */
+    addItem(menuId: number, item: { pageId?: number; url?: string; title?: string; parent?: number; order?: number }): Promise<MenuItem>;
+    updateItem(id: number, patch: { title?: string; url?: string; parent?: number; order?: number }): Promise<MenuItem>;
+    /** Deletes permanently (menu items have no trash). */
+    removeItem(id: number): Promise<{ deleted: boolean; id: number }>;
   };
   theme: {
     /** What a page path really renders: theme info, stylesheet/script URLs, inline <style>/<script> contents. */
@@ -89,6 +104,14 @@ globalThis.wp = Object.freeze({
     update: (id, p) => __call("pages.update", { ...p, id }),
     templates: () => __call("pages.templates"),
   }),
+  menus: Object.freeze({
+    list: () => __call("menus.list"),
+    locations: () => __call("menus.locations"),
+    items: (menuId) => __call("menus.items", { menuId }),
+    addItem: (menuId, item) => __call("menus.addItem", { ...item, menuId }),
+    updateItem: (id, patch) => __call("menus.updateItem", { ...patch, id }),
+    removeItem: (id) => __call("menus.removeItem", { id }),
+  }),
   theme: Object.freeze({ styles: (path) => __call("theme.styles", { path }) }),
   assets: Object.freeze({ get: (url) => __call("assets.get", { url }) }),
 });
@@ -111,12 +134,36 @@ const writeArgs = z.object({
   meta: z.record(z.unknown()).optional(),
 });
 
+const menuItemArgs = z.object({
+  title: z.string().optional(),
+  url: z.string().url().optional(),
+  parent: z.number().int().min(0).optional(),
+  order: z.number().int().min(1).optional(),
+});
+
+function toMenuItem(raw: unknown) {
+  const i = raw as {
+    id: number; title: { raw?: string; rendered: string } | string; url: string; parent: number;
+    menu_order: number; type: string; object: string; object_id: number;
+  };
+  return {
+    id: i.id,
+    title: typeof i.title === "string" ? i.title : (i.title.raw ?? i.title.rendered),
+    url: i.url,
+    parent: i.parent,
+    order: i.menu_order,
+    type: i.type,
+    object: i.object,
+    object_id: i.object_id,
+  };
+}
+
 function buildBindings(client: WordPressClient): Record<string, HostBinding> {
   let writes = 0;
   const countWrite = () => {
     writes += 1;
     if (writes > MAX_WRITES_PER_EXECUTION) {
-      throw new Error(`Write limit reached (${MAX_WRITES_PER_EXECUTION} create/update calls per execution).`);
+      throw new Error(`Write limit reached (${MAX_WRITES_PER_EXECUTION} writes per execution: page create/update, menu add/update/remove). Split the work into several runs.`);
     }
   };
 
@@ -137,6 +184,49 @@ function buildBindings(client: WordPressClient): Record<string, HostBinding> {
       return client.updatePage(id, p);
     },
     "pages.templates": async () => client.listPageTemplates(),
+    "menus.list": async () =>
+      (await client.listMenus()).map((m) => {
+        const { id, name, slug, locations } = m as { id: number; name: string; slug: string; locations: string[] };
+        return { id, name, slug, locations };
+      }),
+    "menus.locations": async () => {
+      const raw = (await client.listMenuLocations()) as Record<string, { name: string; description: string; menu: number }>;
+      return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, { name: v.name, description: v.description, menu: v.menu }]));
+    },
+    "menus.items": async (args) => {
+      const { menuId } = z.object({ menuId: z.number().int().min(1) }).parse(args);
+      return (await client.listMenuItems(menuId)).map(toMenuItem);
+    },
+    "menus.addItem": async (args) => {
+      const item = menuItemArgs
+        .extend({ menuId: z.number().int().min(1), pageId: z.number().int().min(1).optional() })
+        .refine((i) => Boolean(i.pageId) !== Boolean(i.url), "Pass exactly one of pageId or url.")
+        .parse(args);
+      countWrite();
+      return toMenuItem(
+        await client.createMenuItem({
+          menus: item.menuId,
+          status: "publish",
+          ...(item.pageId
+            ? { type: "post_type", object: "page", object_id: item.pageId }
+            : { type: "custom", url: item.url }),
+          ...(item.title !== undefined ? { title: item.title } : {}),
+          ...(item.parent !== undefined ? { parent: item.parent } : {}),
+          ...(item.order !== undefined ? { menu_order: item.order } : {}),
+        }),
+      );
+    },
+    "menus.updateItem": async (args) => {
+      const { id, order, ...rest } = menuItemArgs.extend({ id: z.number().int().min(1) }).parse(args);
+      countWrite();
+      return toMenuItem(await client.updateMenuItem(id, { ...rest, ...(order !== undefined ? { menu_order: order } : {}) }));
+    },
+    "menus.removeItem": async (args) => {
+      const { id } = z.object({ id: z.number().int().min(1) }).parse(args);
+      countWrite();
+      await client.deleteMenuItem(id);
+      return { deleted: true, id };
+    },
     "theme.styles": async (args) =>
       client.getThemeStyles(z.object({ path: z.string().nullish() }).parse(args).path ?? "/"),
     "assets.get": async (args) => client.getAssetContent(z.object({ url: z.string().url() }).parse(args).url),
@@ -161,7 +251,7 @@ export function registerCodeTools(server: McpServer, client: WordPressClient): v
         "already authenticated against the connected WordPress site. Use `return` to send a value back, and " +
         "console.log for notes. Chain several calls in one snippet and filter big payloads (page HTML, theme CSS) " +
         "in code — only the returned value reaches you, truncated at " +
-        `${MAX_OUTPUT_CHARS} chars. Limits per run: 60 s, 50 API calls, ${MAX_WRITES_PER_EXECUTION} page writes.\n\n` +
+        `${MAX_OUTPUT_CHARS} chars. Limits per run: 60 s, 50 API calls, ${MAX_WRITES_PER_EXECUTION} writes (pages + menus).\n\n` +
         "Available API (TypeScript):\n```ts\n" +
         API_TYPES +
         "\n```\n\nExample:\n```js\n" +

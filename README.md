@@ -161,10 +161,15 @@ const vars = Object.fromEntries([...css.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)].
 return { theme: s.theme.name, vars };
 ```
 
-Per-execution limits: 60 s, 256 MB, 50 API calls, 10 page writes (`create`/`update`), 40 000 output
+Per-execution limits: 60 s, 256 MB, 50 API calls, 10 writes (page `create`/`update`, menu `addItem`/`updateItem`/`removeItem`), 40 000 output
 characters. `wp.pages.list()` returns light fields only unless you pass `fields`. `wp.pages.create`/`update` accept a `template`
 (e.g. `"100-width.php"` on Avada); `wp.pages.templates()` lists the ones the active theme offers. The sandbox also
 has `base64Encode(text)` (UTF-8 → base64), since QuickJS has no `btoa`.
+
+`wp.menus` reads and edits the classic WordPress nav menus through core's `wp/v2/menus` and
+`wp/v2/menu-items` routes (no plugin needed; the user needs `edit_theme_options`, i.e. Administrator).
+Changes are live immediately on every page that renders the menu — on Avada, the header's
+`[fusion_menu]` points at one of these menus.
 
 On Avada sites the bridge plugin registers the `fusion_builder_status` page meta for REST, so the agent
 can create pages Fusion Builder treats as its own (`meta: { fusion_builder_status: "active" }`). Avada
