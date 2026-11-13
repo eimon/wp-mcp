@@ -1,7 +1,7 @@
 ---
 name: avada-fusion-builder
 description: "Trigger: Avada, Fusion Builder, fusion_builder_container. Author WordPress pages as native Fusion Builder shortcodes instead of raw HTML, so pages stay editable in Avada's visual builder."
-license: Apache-2.0
+license: MIT
 metadata:
   author: gentleman-programming
   version: "1.1"
