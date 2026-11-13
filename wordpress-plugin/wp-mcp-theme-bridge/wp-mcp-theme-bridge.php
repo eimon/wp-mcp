@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP MCP Theme Bridge
  * Description: Exposes plain REST API routes so an external MCP server can discover which CSS/JS a page actually renders (theme-agnostic), to produce new pages that visually match the site. Uses WordPress core REST infrastructure only — no third-party MCP plugin required.
- * Version: 0.2.0
+ * Version: 0.3.0
  * License: GPL-2.0-or-later
  */
 
@@ -28,6 +28,18 @@ function wpmtb_register_routes() {
 					'sanitize_callback' => 'sanitize_text_field',
 				),
 			),
+		)
+	);
+
+	register_rest_route(
+		'wp-mcp-bridge/v1',
+		'/page-templates',
+		array(
+			'methods'             => 'GET',
+			'callback'            => 'wpmtb_get_page_templates',
+			'permission_callback' => function () {
+				return current_user_can( 'edit_pages' );
+			},
 		)
 	);
 
@@ -182,6 +194,30 @@ function wpmtb_get_theme_styles( WP_REST_Request $request ) {
 		),
 		200
 	);
+}
+
+/**
+ * REST callback for GET /wp-mcp-bridge/v1/page-templates
+ *
+ * Core's wp/v2/pages schema no longer publishes the valid `template` values
+ * (they're checked by a validate callback), so expose them here with their
+ * human-readable names. "" is always valid and means the theme default.
+ */
+function wpmtb_get_page_templates() {
+	$templates = array(
+		array(
+			'file' => '',
+			'name' => 'Default',
+		),
+	);
+	foreach ( wp_get_theme()->get_page_templates( null, 'page' ) as $file => $name ) {
+		$templates[] = array(
+			'file' => $file,
+			'name' => $name,
+		);
+	}
+
+	return new WP_REST_Response( $templates, 200 );
 }
 
 /**

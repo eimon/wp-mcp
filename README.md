@@ -9,8 +9,9 @@ It combines two things:
 
 - WordPress's native REST API (`wp/v2/pages`), authenticated with **Application Passwords**.
 - A small companion plugin, `wp-mcp-theme-bridge` (bundled in this repo under
-  `wordpress-plugin/wp-mcp-theme-bridge/`), that exposes two extra read-only routes
-  (`wp-mcp-bridge/v1/theme-styles` and `wp-mcp-bridge/v1/asset-content`) so the agent can see
+  `wordpress-plugin/wp-mcp-theme-bridge/`), that exposes three extra read-only routes
+  (`wp-mcp-bridge/v1/theme-styles`, `wp-mcp-bridge/v1/asset-content` and
+  `wp-mcp-bridge/v1/page-templates`) so the agent can see
   exactly which CSS/JS a page actually renders — theme-agnostic, since it parses the real
   rendered HTML instead of relying on `theme.json` (many themes, including Astra, resolve colors
   at PHP runtime, not in static files).
@@ -161,7 +162,8 @@ return { theme: s.theme.name, vars };
 ```
 
 Per-execution limits: 60 s, 256 MB, 50 API calls, 10 page writes (`create`/`update`), 40 000 output
-characters. `wp.pages.list()` returns light fields only unless you pass `fields`.
+characters. `wp.pages.list()` returns light fields only unless you pass `fields`. `wp.pages.create`/`update` accept a `template`
+(e.g. `"100-width.php"` on Avada); `wp.pages.templates()` lists the ones the active theme offers.
 
 ### Classic tools (`WP_MCP_MODE=tools` or `both`)
 
@@ -169,7 +171,7 @@ characters. `wp.pages.list()` returns light fields only unless you pass `fields`
 | -------------------- | ---------------------------------------------------------------------------- |
 | `list_pages`         | List/search WordPress pages (`search`, `page`, `per_page`, `status`)        |
 | `get_page`           | Fetch a single page by ID                                                    |
-| `create_page`        | Create a new page (`title`, `content` HTML, `status`, optional `meta`)       |
+| `create_page`        | Create a new page (`title`, `content` HTML, `status`, optional `template`, `meta`) |
 | `update_page`        | Update an existing page by ID (same fields as create, all optional)          |
 | `get_theme_styles`   | Inspect a page path's real rendered theme name, stylesheets, scripts, inline CSS/JS |
 | `get_asset_content`  | Fetch the raw text content of a same-origin CSS/JS asset URL                 |

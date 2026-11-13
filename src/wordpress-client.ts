@@ -50,6 +50,8 @@ export interface PagePayload {
   title?: string;
   content?: string;
   status?: "draft" | "publish" | "pending" | "private" | "future";
+  /** Theme page template file, e.g. "100-width.php"; "" resets to the default template. */
+  template?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -64,6 +66,11 @@ export interface ThemeStylesResult {
   scripts: string[];
   inline_styles: string[];
   inline_scripts: string[];
+}
+
+export interface PageTemplate {
+  file: string;
+  name: string;
 }
 
 export interface AssetContentResult {
@@ -143,7 +150,11 @@ export class WordPressClient {
         (typeof parsedBody === "string" && parsedBody.length > 0
           ? parsedBody
           : `WordPress request failed with HTTP ${response.status}`);
-      throw new WordPressApiError(message, response.status, errorBody.code, errorBody.data);
+      // rest_invalid_param puts the useful part (e.g. the list of valid
+      // values) in data.params, not in the top-level message.
+      const params = (errorBody.data as { params?: Record<string, string> } | undefined)?.params;
+      const details = params ? ` ${Object.values(params).join(" ")}` : "";
+      throw new WordPressApiError(message + details, response.status, errorBody.code, errorBody.data);
     }
 
     return parsedBody as T;
@@ -206,6 +217,11 @@ export class WordPressClient {
   async getThemeStyles(path = "/"): Promise<ThemeStylesResult> {
     const query = this.buildQuery({ path });
     return this.request<ThemeStylesResult>(`/wp-json/wp-mcp-bridge/v1/theme-styles${query}`);
+  }
+
+  /** Page templates the active theme offers; file "" is the default template. */
+  async listPageTemplates(): Promise<PageTemplate[]> {
+    return this.request<PageTemplate[]>("/wp-json/wp-mcp-bridge/v1/page-templates");
   }
 
   async getAssetContent(url: string): Promise<AssetContentResult> {

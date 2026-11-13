@@ -17,7 +17,7 @@ const MAX_OUTPUT_CHARS = 40_000;
  */
 const API_TYPES = `
 interface Page {
-  id: number; slug: string; link: string; status: string; parent: number; modified: string;
+  id: number; slug: string; link: string; status: string; parent: number; modified: string; template: string;
   title: { rendered: string; raw?: string };
   content?: { rendered: string; raw?: string }; // only when requested / from get()
   [field: string]: unknown;
@@ -32,9 +32,13 @@ declare const wp: {
     /** One page with context=edit. content.raw is the stored source (Fusion Builder shortcodes on Avada,
      *  block markup on Gutenberg) — copy its syntax when writing new content; content.rendered is the HTML output. */
     get(id: number): Promise<Page>;
-    /** Creates a page. status defaults to "draft". Max ${MAX_WRITES_PER_EXECUTION} writes per execution. */
-    create(p: { title: string; content: string; status?: Status; meta?: Record<string, unknown> }): Promise<Page>;
-    update(id: number, p: { title?: string; content?: string; status?: Status; meta?: Record<string, unknown> }): Promise<Page>;
+    /** Creates a page. status defaults to "draft". Max ${MAX_WRITES_PER_EXECUTION} writes per execution.
+     *  template: a file from templates() (e.g. "100-width.php" for full width on Avada); "" or omitted = theme default. */
+    create(p: { title: string; content: string; status?: Status; template?: string; meta?: Record<string, unknown> }): Promise<Page>;
+    update(id: number, p: { title?: string; content?: string; status?: Status; template?: string; meta?: Record<string, unknown> }): Promise<Page>;
+    /** Page templates the active theme offers, e.g. { file: "100-width.php", name: "100% Width" }.
+     *  file "" is the default template. Needs the wp-mcp-theme-bridge plugin. */
+    templates(): Promise<{ file: string; name: string }[]>;
   };
   theme: {
     /** What a page path really renders: theme info, stylesheet/script URLs, inline <style>/<script> contents. */
@@ -65,6 +69,7 @@ globalThis.wp = Object.freeze({
     get: (id) => __call("pages.get", { id }),
     create: (p) => __call("pages.create", p),
     update: (id, p) => __call("pages.update", { ...p, id }),
+    templates: () => __call("pages.templates"),
   }),
   theme: Object.freeze({ styles: (path) => __call("theme.styles", { path }) }),
   assets: Object.freeze({ get: (url) => __call("assets.get", { url }) }),
@@ -84,6 +89,7 @@ const writeArgs = z.object({
   title: z.string().optional(),
   content: z.string().optional(),
   status: STATUS.optional(),
+  template: z.string().optional(),
   meta: z.record(z.unknown()).optional(),
 });
 
@@ -112,6 +118,7 @@ function buildBindings(client: WordPressClient): Record<string, HostBinding> {
       countWrite();
       return client.updatePage(id, p);
     },
+    "pages.templates": async () => client.listPageTemplates(),
     "theme.styles": async (args) =>
       client.getThemeStyles(z.object({ path: z.string().nullish() }).parse(args).path ?? "/"),
     "assets.get": async (args) => client.getAssetContent(z.object({ url: z.string().url() }).parse(args).url),

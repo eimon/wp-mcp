@@ -63,6 +63,12 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
           .enum(["draft", "publish", "pending", "private", "future"])
           .optional()
           .describe('Publication status. Defaults to "draft" if omitted.'),
+        template: z
+          .string()
+          .optional()
+          .describe(
+            'Theme page template file, e.g. "100-width.php" (Avada full width). "" = theme default. Invalid values are rejected by WordPress with the list of valid ones.',
+          ),
         meta: z.record(z.unknown()).optional().describe("Optional meta fields object to attach to the page."),
       },
     },
@@ -72,6 +78,7 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
           title: args.title,
           content: args.content,
           status: args.status ?? "draft",
+          template: args.template,
           meta: args.meta,
         });
         return toToolResult(page);
@@ -95,6 +102,12 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
           .enum(["draft", "publish", "pending", "private", "future"])
           .optional()
           .describe("New publication status."),
+        template: z
+          .string()
+          .optional()
+          .describe(
+            'Theme page template file, e.g. "100-width.php" (Avada full width). "" = theme default. Invalid values are rejected by WordPress with the list of valid ones.',
+          ),
         meta: z.record(z.unknown()).optional().describe("Meta fields object to merge/update on the page."),
       },
     },
