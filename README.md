@@ -198,6 +198,20 @@ npm run smoke-test
 
 It exits non-zero and prints the failure if any tool errors or an expected shape isn't found.
 
+## Agent skill: Avada / Fusion Builder
+
+`skills/avada-fusion-builder/` is a [Claude skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview)
+that teaches an agent to author pages on Avada sites through this server: native Fusion Builder
+shortcodes instead of raw HTML, calibrating attribute syntax against real pages, using the site's
+`--awb-*` tokens, and the layout/CSS behavior of Avada's rendered DOM (`references/css-integration.md`).
+
+To install it, zip the folder and upload it in claude.ai → Settings → Skills, or copy it into
+`~/.claude/skills/` for Claude Code:
+
+```bash
+cd skills && zip -r avada-fusion-builder.zip avada-fusion-builder
+```
+
 ## Troubleshooting
 
 ### Silent `rest_not_logged_in` / 401 errors despite correct credentials
