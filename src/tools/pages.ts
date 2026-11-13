@@ -1,36 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WordPressApiError, WordPressClient } from "../wordpress-client.js";
-
-function toToolResult(data: unknown) {
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify(data, null, 2),
-      },
-    ],
-  };
-}
-
-function toErrorResult(error: unknown) {
-  const message =
-    error instanceof WordPressApiError
-      ? `WordPress API error (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ""}): ${error.message}`
-      : error instanceof Error
-        ? error.message
-        : String(error);
-
-  return {
-    isError: true as const,
-    content: [
-      {
-        type: "text" as const,
-        text: message,
-      },
-    ],
-  };
-}
+import type { WordPressClient } from "../wordpress-client.js";
+import { toErrorResult, toToolResult } from "./results.js";
 
 export function registerPageTools(server: McpServer, client: WordPressClient): void {
   server.registerTool(
@@ -84,7 +55,9 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
     {
       title: "Create a WordPress page",
       description:
-        "Create a new page via POST /wp-json/wp/v2/pages. `content` is an HTML string. Requires edit_pages capability on the authenticated user.",
+        "Create a new page via POST /wp-json/wp/v2/pages. `content` is an HTML string. Requires edit_pages capability on the authenticated user. " +
+        "WordPress runs wpautop on content (stray/empty <p> around shortcodes and inline elements) unless a page builder disables it via its own meta; " +
+        "`meta` keys not registered with show_in_rest are silently dropped.",
       inputSchema: {
         title: z.string().min(1).describe("The page title."),
         content: z.string().describe("The page body as an HTML string."),
@@ -92,6 +65,12 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
           .enum(["draft", "publish", "pending", "private", "future"])
           .optional()
           .describe('Publication status. Defaults to "draft" if omitted.'),
+        template: z
+          .string()
+          .optional()
+          .describe(
+            'Theme page template file, e.g. "100-width.php" (Avada full width). "" = theme default. Invalid values are rejected by WordPress with the list of valid ones.',
+          ),
         meta: z.record(z.unknown()).optional().describe("Optional meta fields object to attach to the page."),
       },
     },
@@ -101,6 +80,7 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
           title: args.title,
           content: args.content,
           status: args.status ?? "draft",
+          template: args.template,
           meta: args.meta,
         });
         return toToolResult(page);
@@ -124,6 +104,12 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
           .enum(["draft", "publish", "pending", "private", "future"])
           .optional()
           .describe("New publication status."),
+        template: z
+          .string()
+          .optional()
+          .describe(
+            'Theme page template file, e.g. "100-width.php" (Avada full width). "" = theme default. Invalid values are rejected by WordPress with the list of valid ones.',
+          ),
         meta: z.record(z.unknown()).optional().describe("Meta fields object to merge/update on the page."),
       },
     },

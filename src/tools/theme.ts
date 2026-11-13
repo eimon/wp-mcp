@@ -1,36 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WordPressApiError, WordPressClient } from "../wordpress-client.js";
-
-function toToolResult(data: unknown) {
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify(data, null, 2),
-      },
-    ],
-  };
-}
-
-function toErrorResult(error: unknown) {
-  const message =
-    error instanceof WordPressApiError
-      ? `WordPress API error (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ""}): ${error.message}`
-      : error instanceof Error
-        ? error.message
-        : String(error);
-
-  return {
-    isError: true as const,
-    content: [
-      {
-        type: "text" as const,
-        text: message,
-      },
-    ],
-  };
-}
+import type { WordPressClient } from "../wordpress-client.js";
+import { toErrorResult, toToolResult } from "./results.js";
 
 export function registerThemeTools(server: McpServer, client: WordPressClient): void {
   server.registerTool(

@@ -42,12 +42,16 @@ export interface ListPagesParams {
   page?: number;
   per_page?: number;
   status?: string;
+  /** Maps to WordPress's `_fields`, e.g. ["id", "title"]. Omit for full objects. */
+  fields?: string[];
 }
 
 export interface PagePayload {
   title?: string;
   content?: string;
   status?: "draft" | "publish" | "pending" | "private" | "future";
+  /** Theme page template file, e.g. "100-width.php"; "" resets to the default template. */
+  template?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -62,6 +66,24 @@ export interface ThemeStylesResult {
   scripts: string[];
   inline_styles: string[];
   inline_scripts: string[];
+}
+
+export interface MenuItemPayload {
+  title?: string;
+  url?: string;
+  type?: "post_type" | "custom" | "taxonomy" | "post_type_archive";
+  object?: string;
+  object_id?: number;
+  menus?: number;
+  parent?: number;
+  menu_order?: number;
+  status?: "publish" | "draft";
+  target?: "" | "_blank";
+}
+
+export interface PageTemplate {
+  file: string;
+  name: string;
 }
 
 export interface AssetContentResult {
@@ -141,7 +163,11 @@ export class WordPressClient {
         (typeof parsedBody === "string" && parsedBody.length > 0
           ? parsedBody
           : `WordPress request failed with HTTP ${response.status}`);
-      throw new WordPressApiError(message, response.status, errorBody.code, errorBody.data);
+      // rest_invalid_param puts the useful part (e.g. the list of valid
+      // values) in data.params, not in the top-level message.
+      const params = (errorBody.data as { params?: Record<string, string> } | undefined)?.params;
+      const details = params ? ` ${Object.values(params).join(" ")}` : "";
+      throw new WordPressApiError(message + details, response.status, errorBody.code, errorBody.data);
     }
 
     return parsedBody as T;
@@ -166,6 +192,7 @@ export class WordPressClient {
       page: params.page,
       per_page: params.per_page,
       status: params.status,
+      _fields: params.fields?.join(","),
     });
     return this.request<unknown[]>(`/wp-json/wp/v2/pages${query}`);
   }
@@ -198,11 +225,52 @@ export class WordPressClient {
     });
   }
 
+  // ---- wp/v2 menus (core since WP 5.9; needs edit_theme_options) --------
+
+  async listMenus(): Promise<unknown[]> {
+    return this.request<unknown[]>("/wp-json/wp/v2/menus?per_page=100&context=edit");
+  }
+
+  async listMenuLocations(): Promise<unknown> {
+    return this.request<unknown>("/wp-json/wp/v2/menu-locations");
+  }
+
+  async listMenuItems(menuId: number): Promise<unknown[]> {
+    const query = this.buildQuery({ menus: menuId, per_page: 100, context: "edit", orderby: "menu_order", order: "asc" });
+    return this.request<unknown[]>(`/wp-json/wp/v2/menu-items${query}`);
+  }
+
+  async createMenuItem(payload: MenuItemPayload): Promise<unknown> {
+    return this.request<unknown>("/wp-json/wp/v2/menu-items", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateMenuItem(id: number, payload: MenuItemPayload): Promise<unknown> {
+    return this.request<unknown>(`/wp-json/wp/v2/menu-items/${id}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteMenuItem(id: number): Promise<unknown> {
+    // Menu items don't support the trash; WordPress rejects deletes without force.
+    return this.request<unknown>(`/wp-json/wp/v2/menu-items/${id}?force=true`, {
+      method: "DELETE",
+    });
+  }
+
   // ---- wp-mcp-bridge/v1 -------------------------------------------------
 
   async getThemeStyles(path = "/"): Promise<ThemeStylesResult> {
     const query = this.buildQuery({ path });
     return this.request<ThemeStylesResult>(`/wp-json/wp-mcp-bridge/v1/theme-styles${query}`);
+  }
+
+  /** Page templates the active theme offers; file "" is the default template. */
+  async listPageTemplates(): Promise<PageTemplate[]> {
+    return this.request<PageTemplate[]>("/wp-json/wp-mcp-bridge/v1/page-templates");
   }
 
   async getAssetContent(url: string): Promise<AssetContentResult> {

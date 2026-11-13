@@ -1,6 +1,6 @@
 {
   "name": "wp-mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server that lets an AI design agent connect to any WordPress site, read its real rendered CSS/JS/theme info, and create/update pages.",
   "type": "module",
   "main": "dist/index.js",
@@ -41,12 +41,13 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "quickjs-emscripten": "^0.32.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
-    "@types/node": "^22.10.0"
+    "typescript": "^5.7.0"
   },
   "license": "MIT"
 }

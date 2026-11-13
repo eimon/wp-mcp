@@ -2,13 +2,40 @@
 /**
  * Plugin Name: WP MCP Theme Bridge
  * Description: Exposes plain REST API routes so an external MCP server can discover which CSS/JS a page actually renders (theme-agnostic), to produce new pages that visually match the site. Uses WordPress core REST infrastructure only — no third-party MCP plugin required.
- * Version: 0.2.0
+ * Version: 0.4.0
  * License: GPL-2.0-or-later
  */
 
 defined( 'ABSPATH' ) || exit;
 
 add_action( 'rest_api_init', 'wpmtb_register_routes' );
+add_action( 'init', 'wpmtb_register_builder_meta' );
+
+/**
+ * Page builders keep per-page state in post meta that core REST ignores
+ * unless it's registered with show_in_rest. Expose the few keys an agent
+ * needs to author pages the builder treats as its own — only when that
+ * builder is active, so the plugin stays theme-agnostic.
+ */
+function wpmtb_register_builder_meta() {
+	if ( class_exists( 'FusionBuilder' ) ) {
+		// Avada: 'active' marks a Fusion Builder page. Avada then cleans the
+		// wpautop debris (empty <p>) around shortcodes and opens the page in
+		// the builder UI instead of the classic editor.
+		register_post_meta(
+			'page',
+			'fusion_builder_status',
+			array(
+				'type'          => 'string',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => function ( $allowed, $meta_key, $post_id ) {
+					return current_user_can( 'edit_post', $post_id );
+				},
+			)
+		);
+	}
+}
 
 function wpmtb_register_routes() {
 	register_rest_route(
@@ -28,6 +55,18 @@ function wpmtb_register_routes() {
 					'sanitize_callback' => 'sanitize_text_field',
 				),
 			),
+		)
+	);
+
+	register_rest_route(
+		'wp-mcp-bridge/v1',
+		'/page-templates',
+		array(
+			'methods'             => 'GET',
+			'callback'            => 'wpmtb_get_page_templates',
+			'permission_callback' => function () {
+				return current_user_can( 'edit_pages' );
+			},
 		)
 	);
 
@@ -182,6 +221,30 @@ function wpmtb_get_theme_styles( WP_REST_Request $request ) {
 		),
 		200
 	);
+}
+
+/**
+ * REST callback for GET /wp-mcp-bridge/v1/page-templates
+ *
+ * Core's wp/v2/pages schema no longer publishes the valid `template` values
+ * (they're checked by a validate callback), so expose them here with their
+ * human-readable names. "" is always valid and means the theme default.
+ */
+function wpmtb_get_page_templates() {
+	$templates = array(
+		array(
+			'file' => '',
+			'name' => 'Default',
+		),
+	);
+	foreach ( wp_get_theme()->get_page_templates( null, 'page' ) as $file => $name ) {
+		$templates[] = array(
+			'file' => $file,
+			'name' => $name,
+		);
+	}
+
+	return new WP_REST_Response( $templates, 200 );
 }
 
 /**

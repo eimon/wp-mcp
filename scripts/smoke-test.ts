@@ -42,6 +42,8 @@ async function main(): Promise<void> {
       WORDPRESS_URL: wordpressUrl,
       WORDPRESS_USERNAME: wordpressUsername,
       WORDPRESS_APP_PASSWORD: wordpressAppPassword,
+      // Exercise both surfaces: the legacy per-endpoint tools and `execute`.
+      WP_MCP_MODE: "both",
     },
   });
 
@@ -58,6 +60,7 @@ async function main(): Promise<void> {
   console.log(toolNames.join(", "));
   const expected = [
     "create_page",
+    "execute",
     "get_asset_content",
     "get_page",
     "get_theme_styles",
@@ -103,6 +106,40 @@ async function main(): Promise<void> {
     throw new Error("list_pages did not return an array.");
   }
   console.log(`OK: list_pages returned an array with ${pagesData.length} page(s).\n`);
+
+  // 4. execute (Code Mode): chain calls and filter inside the sandbox.
+  console.log("=== execute ===");
+  const execResult = await client.callTool({
+    name: "execute",
+    arguments: {
+      code: [
+        'const s = await wp.theme.styles("/");',
+        "const pages = await wp.pages.list({ per_page: 5 });",
+        "return { theme: s.theme.name, stylesheets: s.stylesheets.length, pages: pages.map(p => p.id) };",
+      ].join("\n"),
+    },
+  });
+  const execText = extractText(execResult);
+  console.log(execText);
+  if (execResult.isError) {
+    throw new Error("execute returned an error result.");
+  }
+  const execData = JSON.parse(execText.slice(execText.indexOf("{")));
+  if (execData.theme !== themeData.theme.name || !Array.isArray(execData.pages)) {
+    throw new Error("execute did not return the expected shape.");
+  }
+  console.log("OK: execute chained theme + pages calls in one run.\n");
+
+  // 5. execute: the sandbox must not reach the network or Node.
+  const escapeResult = await client.callTool({
+    name: "execute",
+    arguments: { code: "return [typeof fetch, typeof require, typeof process];" },
+  });
+  const escapeText = extractText(escapeResult);
+  if (!escapeText.includes('"undefined",\n  "undefined",\n  "undefined"')) {
+    throw new Error(`Sandbox exposes host globals: ${escapeText}`);
+  }
+  console.log("OK: sandbox has no fetch/require/process.\n");
 
   await client.close();
   console.log("All smoke tests passed.");
