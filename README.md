@@ -36,8 +36,9 @@ activation like any other plugin:
 2. In `wp-admin → Plugins`, find **WP MCP Theme Bridge** and activate it.
 3. Verify it: `curl -H "Authorization: Basic <base64 user:app-password>" "https://your-site.com/wp-json/wp-mcp-bridge/v1/theme-styles?path=/"` should return JSON, not a 404.
 
-The four page tools (`list_pages`, `get_page`, `create_page`, `update_page`) work without this
-plugin — it's only required for the two theme-inspection tools.
+The four page tools (`list_pages`, `get_page`, `create_page`, `update_page`) and `wp.pages` work
+without this plugin — it's only required for the two theme-inspection tools (`wp.theme`, `wp.assets`
+in Code Mode).
 
 ## Install & build
 
@@ -67,12 +68,13 @@ stdio — this is what an MCP client will actually spawn.
 | `WORDPRESS_URL`           | Base URL of the WordPress site, no trailing slash (e.g. `http://localhost:8080`) |
 | `WORDPRESS_USERNAME`      | WordPress username to authenticate as                     |
 | `WORDPRESS_APP_PASSWORD`  | The Application Password generated above                  |
+| `WP_MCP_MODE`             | Optional. `code` (default: only `execute`), `tools` (only the classic per-endpoint tools) or `both` |
 
 Copy `.env.example` to `.env` and fill it in for local development (`.env` is git-ignored and is
 **not** read automatically by the built server — it's there for your own tooling/reference; pass
 the variables through your process environment or your MCP client's `env` config, as shown below).
 
-The server validates these three variables at startup and exits with a clear error message if any
+The server validates the three `WORDPRESS_*` variables at startup and exits with a clear error message if any
 is missing.
 
 ## Registering with an MCP client
@@ -136,6 +138,33 @@ doesn't silently pick up unreleased changes from the default branch.
 
 ## Available tools
 
+### Code Mode (default): `execute`
+
+Instead of one MCP tool per endpoint, the server exposes a single `execute` tool whose description
+carries a small TypeScript API (`wp.pages`, `wp.theme`, `wp.assets`). The model writes an async
+JavaScript snippet against it; the server runs it in a fresh [QuickJS](https://github.com/justjake/quickjs-emscripten)
+WASM sandbox and returns only what the snippet `return`s. This follows Cloudflare's
+[Code Mode](https://blog.cloudflare.com/code-mode/) approach:
+
+- **Big payloads stay out of the model's context.** Avada's compiled CSS is ~1 MB and an unfiltered
+  `list_pages` is ~450 KB for 10 pages; a snippet that extracts the CSS custom properties and a page
+  index returns ~1 KB.
+- **Several calls in one round-trip**, including `Promise.all`.
+- **Credentials never enter the sandbox.** It has no `fetch`, `require`, `process` or filesystem; its
+  only way out is the `wp` object, whose calls are executed by the host with the Application Password.
+
+```js
+const s = await wp.theme.styles("/");
+const css = (await wp.assets.get(s.stylesheets[0])).content;
+const vars = Object.fromEntries([...css.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)].map(m => [m[1], m[2].trim()]));
+return { theme: s.theme.name, vars };
+```
+
+Per-execution limits: 60 s, 256 MB, 50 API calls, 10 page writes (`create`/`update`), 40 000 output
+characters. `wp.pages.list()` returns light fields only unless you pass `fields`.
+
+### Classic tools (`WP_MCP_MODE=tools` or `both`)
+
 | Tool                | Description                                                                 |
 | -------------------- | ---------------------------------------------------------------------------- |
 | `list_pages`         | List/search WordPress pages (`search`, `page`, `per_page`, `status`)        |
@@ -149,8 +178,8 @@ doesn't silently pick up unreleased changes from the default branch.
 
 There's no human clicking through this — `scripts/smoke-test.ts` is the verification. It spawns
 the built server as a child process using the official MCP SDK's `Client` + `StdioClientTransport`,
-calls `tools/list`, then exercises `get_theme_styles` and `list_pages` against a real WordPress
-instance:
+calls `tools/list`, then exercises `get_theme_styles`, `list_pages` and `execute` (including a
+check that the sandbox has no `fetch`/`require`/`process`) against a real WordPress instance:
 
 ```bash
 npm run build

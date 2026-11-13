@@ -42,6 +42,8 @@ export interface ListPagesParams {
   page?: number;
   per_page?: number;
   status?: string;
+  /** Maps to WordPress's `_fields`, e.g. ["id", "title"]. Omit for full objects. */
+  fields?: string[];
 }
 
 export interface PagePayload {
@@ -166,6 +168,7 @@ export class WordPressClient {
       page: params.page,
       per_page: params.per_page,
       status: params.status,
+      _fields: params.fields?.join(","),
     });
     return this.request<unknown[]>(`/wp-json/wp/v2/pages${query}`);
   }
