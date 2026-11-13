@@ -163,7 +163,12 @@ return { theme: s.theme.name, vars };
 
 Per-execution limits: 60 s, 256 MB, 50 API calls, 10 page writes (`create`/`update`), 40 000 output
 characters. `wp.pages.list()` returns light fields only unless you pass `fields`. `wp.pages.create`/`update` accept a `template`
-(e.g. `"100-width.php"` on Avada); `wp.pages.templates()` lists the ones the active theme offers.
+(e.g. `"100-width.php"` on Avada); `wp.pages.templates()` lists the ones the active theme offers. The sandbox also
+has `base64Encode(text)` (UTF-8 → base64), since QuickJS has no `btoa`.
+
+On Avada sites the bridge plugin registers the `fusion_builder_status` page meta for REST, so the agent
+can create pages Fusion Builder treats as its own (`meta: { fusion_builder_status: "active" }`). Avada
+then strips the empty `<p>` that `wpautop` leaves around shortcodes and opens the page in its builder.
 
 ### Classic tools (`WP_MCP_MODE=tools` or `both`)
 

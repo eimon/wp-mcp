@@ -20,6 +20,7 @@ interface Page {
   id: number; slug: string; link: string; status: string; parent: number; modified: string; template: string;
   title: { rendered: string; raw?: string };
   content?: { rendered: string; raw?: string }; // only when requested / from get()
+  meta?: Record<string, unknown>; // only meta keys registered with show_in_rest
   [field: string]: unknown;
 }
 type Status = "draft" | "publish" | "pending" | "private" | "future";
@@ -33,7 +34,11 @@ declare const wp: {
      *  block markup on Gutenberg) — copy its syntax when writing new content; content.rendered is the HTML output. */
     get(id: number): Promise<Page>;
     /** Creates a page. status defaults to "draft". Max ${MAX_WRITES_PER_EXECUTION} writes per execution.
-     *  template: a file from templates() (e.g. "100-width.php" for full width on Avada); "" or omitted = theme default. */
+     *  template: a file from templates() (e.g. "100-width.php" for full width on Avada); "" or omitted = theme default.
+     *  meta: WordPress silently drops keys not registered with show_in_rest — check get(id).meta after writing.
+     *  WordPress runs wpautop on content: inline elements at the top level of an HTML chunk get wrapped in <p>,
+     *  and empty <p></p> can appear between shortcodes (with a real margin). Page builders turn this off through
+     *  their own meta (Avada: meta.fusion_builder_status = "active"); otherwise prefer block-level markup. */
     create(p: { title: string; content: string; status?: Status; template?: string; meta?: Record<string, unknown> }): Promise<Page>;
     update(id: number, p: { title?: string; content?: string; status?: Status; template?: string; meta?: Record<string, unknown> }): Promise<Page>;
     /** Page templates the active theme offers, e.g. { file: "100-width.php", name: "100% Width" }.
@@ -54,6 +59,8 @@ declare const wp: {
   };
 };
 declare const console: { log(...args: unknown[]): void };
+/** UTF-8 text → base64 (the sandbox has no btoa/TextEncoder). E.g. Avada's [fusion_code] body. */
+declare function base64Encode(text: string): string;
 `.trim();
 
 const PRELUDE = `
@@ -62,6 +69,17 @@ const __fmt = (v) => typeof v === "string" ? v : JSON.stringify(v);
 globalThis.console = {
   log: (...a) => __log(a.map(__fmt).join(" ")),
   error: (...a) => __log(a.map(__fmt).join(" ")),
+};
+globalThis.base64Encode = (text) => {
+  const bytes = unescape(encodeURIComponent(String(text)));
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes.charCodeAt(i) << 16) | ((bytes.charCodeAt(i + 1) || 0) << 8) | (bytes.charCodeAt(i + 2) || 0);
+    out += A[(n >> 18) & 63] + A[(n >> 12) & 63] +
+      (i + 1 < bytes.length ? A[(n >> 6) & 63] : "=") + (i + 2 < bytes.length ? A[n & 63] : "=");
+  }
+  return out;
 };
 globalThis.wp = Object.freeze({
   pages: Object.freeze({

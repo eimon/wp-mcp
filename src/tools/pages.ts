@@ -55,7 +55,9 @@ export function registerPageTools(server: McpServer, client: WordPressClient): v
     {
       title: "Create a WordPress page",
       description:
-        "Create a new page via POST /wp-json/wp/v2/pages. `content` is an HTML string. Requires edit_pages capability on the authenticated user.",
+        "Create a new page via POST /wp-json/wp/v2/pages. `content` is an HTML string. Requires edit_pages capability on the authenticated user. " +
+        "WordPress runs wpautop on content (stray/empty <p> around shortcodes and inline elements) unless a page builder disables it via its own meta; " +
+        "`meta` keys not registered with show_in_rest are silently dropped.",
       inputSchema: {
         title: z.string().min(1).describe("The page title."),
         content: z.string().describe("The page body as an HTML string."),
